@@ -12,6 +12,14 @@ import (
 const port = ":42069"
 
 func main() {
+	// interrupt := make(chan os.Signal, 1)
+	// signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	//
+	// go func() {
+	// 	<-interrupt
+	// 	fmt.Println("Quitting")
+	// 	os.Exit(0)
+	// }()
 	listener, err := net.Listen("tcp", ":42069")
 	if err != nil {
 		log.Fatalf("error listening to TCP traffic: %s\n", err.Error())
