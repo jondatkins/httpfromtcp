@@ -1,11 +1,10 @@
 package request
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"strings"
-	"unicode"
 )
 
 type Request struct {
@@ -18,62 +17,68 @@ type RequestLine struct {
 	Method        string
 }
 
-const httpVersion = "1.1"
+const crlf = "\r\n"
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	req, err := io.ReadAll(reader)
+	rawBytes, err := io.ReadAll(reader)
 	if err != nil {
-		log.Fatalf("%sn", err)
+		return nil, err
 	}
-	reqLineList, err := parseRequestLine(string(req))
+	requestLine, err := parseRequestLine(rawBytes)
 	if err != nil {
-		return &Request{}, fmt.Errorf("Error parsing request line: %s", string(req))
+		return nil, err
 	}
-	request := Request{
-		RequestLine: RequestLine{
-			HttpVersion:   reqLineList[2],
-			RequestTarget: reqLineList[1],
-			Method:        reqLineList[0],
-		},
-	}
-	return &request, nil
+	return &Request{
+		RequestLine: *requestLine,
+	}, nil
 }
 
-func parseRequestLine(line string) ([]string, error) {
-	requestLines := strings.Split(line, "\r\n")
-	if len(requestLines) == 0 {
-		return nil, fmt.Errorf("No new line in string: %s", line)
+func parseRequestLine(data []byte) (*RequestLine, error) {
+	idx := bytes.Index(data, []byte(crlf))
+	if idx == -1 {
+		return nil, fmt.Errorf("could not find CRLF in request-line")
 	}
-	requestLine := requestLines[0]
-	// Should be e.g. 'POST /coffee HTTP/1.1'
-	// GET / HTTP/1.1
-	reqLineParts := strings.Split(requestLine, " ")
-	if len(reqLineParts) < 3 {
-		return nil, fmt.Errorf("Request line should have 3 parts: %s", reqLineParts)
+	requestLineText := string(data[:idx])
+	requestLine, err := requestLineFromString(requestLineText)
+	if err != nil {
+		return nil, err
 	}
-	// check 3rd string is only alphabetic
-	isAlphabetic := true
-	for _, char := range reqLineParts[0] {
-		if !unicode.IsLetter(char) {
-			isAlphabetic = false
-			break
-		}
-	}
-	if !isAlphabetic {
-		return nil, fmt.Errorf("Method name must contain letters only: %s", reqLineParts[2])
+	return requestLine, nil
+}
+
+func requestLineFromString(str string) (*RequestLine, error) {
+	parts := strings.Split(str, " ")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("poorly formatted request-line: %s", str)
 	}
 
-	if reqLineParts[0] != strings.ToUpper(reqLineParts[0]) {
-		return nil, fmt.Errorf("Method name must be all caps: %s", reqLineParts[0])
+	method := parts[0]
+	for _, c := range method {
+		if c < 'A' || c > 'Z' {
+			return nil, fmt.Errorf("invalid method: %s", method)
+		}
 	}
-	httpVersionList := strings.Split(reqLineParts[2], "/")
-	if len(httpVersionList) < 2 {
-		return nil, fmt.Errorf("HTTP version string should contain '/': %s", reqLineParts[2])
+
+	requestTarget := parts[1]
+
+	versionParts := strings.Split(parts[2], "/")
+
+	if len(versionParts) != 2 {
+		return nil, fmt.Errorf("malformed start-line: %s", str)
 	}
-	if httpVersionList[1] != httpVersion {
-		return nil, fmt.Errorf("HTTP version should be: %s", httpVersion)
+
+	httpPart := versionParts[0]
+	if httpPart != "HTTP" {
+		return nil, fmt.Errorf("unrecognized HTTP-version: %s", httpPart)
 	}
-	reqLineParts[2] = httpVersionList[1]
-	fmt.Println(reqLineParts)
-	return reqLineParts, nil
+	version := versionParts[1]
+	if version != "1.1" {
+		return nil, fmt.Errorf("unrecognized HTTP-version: %s", version)
+	}
+
+	return &RequestLine{
+		Method:        method,
+		RequestTarget: requestTarget,
+		HttpVersion:   versionParts[1],
+	}, nil
 }
