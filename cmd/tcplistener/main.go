@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"strings"
+
+	"http_from_tcp/internal/request"
 )
 
 const port = ":42069"
@@ -33,12 +35,20 @@ func main() {
 			log.Fatalf("error: %s\n", err.Error())
 		}
 		fmt.Println("Accepted connection from", conn.RemoteAddr())
-
-		linesChan := getLinesChannel(conn)
-
-		for line := range linesChan {
-			fmt.Println("read:", line)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatalf("error: %s\n", err.Error())
 		}
+		fmt.Println("Request line:")
+
+		fmt.Println("- Method:", req.RequestLine.Method)
+		fmt.Println("- Target:", req.RequestLine.RequestTarget)
+		fmt.Println("- Version:", req.RequestLine.HttpVersion)
+		// linesChan := getLinesChannel(conn)
+		//
+		// for line := range linesChan {
+		// 	fmt.Println("read:", line)
+		// }
 		fmt.Println("Connection to ", conn.RemoteAddr(), "closed")
 	}
 }

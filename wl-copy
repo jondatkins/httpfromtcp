@@ -1,0 +1,19 @@
+.
+├── cmd
+│   ├── tcplistener
+│   │   └── main.go
+│   └── udpsender
+│       └── main.go
+├── go.mod
+├── go.sum
+├── internal
+│   └── request
+│       ├── request.go
+│       └── request_test.go
+├── main.go
+├── messages.txt
+├── notes.md
+├── README.md
+└── wl-copy
+
+6 directories, 11 files
