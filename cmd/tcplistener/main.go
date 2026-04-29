@@ -14,14 +14,6 @@ import (
 const port = ":42069"
 
 func main() {
-	// interrupt := make(chan os.Signal, 1)
-	// signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-	//
-	// go func() {
-	// 	<-interrupt
-	// 	fmt.Println("Quitting")
-	// 	os.Exit(0)
-	// }()
 	listener, err := net.Listen("tcp", ":42069")
 	if err != nil {
 		log.Fatalf("error listening to TCP traffic: %s\n", err.Error())
@@ -35,20 +27,15 @@ func main() {
 			log.Fatalf("error: %s\n", err.Error())
 		}
 		fmt.Println("Accepted connection from", conn.RemoteAddr())
+
 		req, err := request.RequestFromReader(conn)
 		if err != nil {
 			log.Fatalf("error: %s\n", err.Error())
 		}
 		fmt.Println("Request line:")
-
 		fmt.Println("- Method:", req.RequestLine.Method)
 		fmt.Println("- Target:", req.RequestLine.RequestTarget)
 		fmt.Println("- Version:", req.RequestLine.HttpVersion)
-		// linesChan := getLinesChannel(conn)
-		//
-		// for line := range linesChan {
-		// 	fmt.Println("read:", line)
-		// }
 		fmt.Println("Connection to ", conn.RemoteAddr(), "closed")
 	}
 }
