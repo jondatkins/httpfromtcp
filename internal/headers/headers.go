@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 const crlf = "\r\n"
@@ -34,11 +35,30 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	value := bytes.TrimSpace(parts[1])
 	key = strings.TrimSpace(key)
-
+	key = strings.ToLower(key)
+	if !isValid(key) {
+		return 0, false, fmt.Errorf("field-name / key has invalid characters: %s", key)
+	}
 	h.Set(key, string(value))
 	return idx + 2, false, nil
 }
 
 func (h Headers) Set(key, value string) {
 	h[key] = value
+}
+
+func isValid(s string) bool {
+	allowedSpecials := "!#$%&'*+-.^_`|~"
+
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+
+		if strings.ContainsRune(allowedSpecials, r) {
+			continue
+		}
+		return false
+	}
+	return true
 }
