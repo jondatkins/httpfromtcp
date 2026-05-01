@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"http_from_tcp/internal/headers"
 )
 
 type Request struct {
 	RequestLine RequestLine
-
-	state requestState
+	Headers     headers.Headers
+	state       requestState
 }
 
 type RequestLine struct {
@@ -24,6 +26,7 @@ type requestState int
 
 const (
 	requestStateInitialized requestState = iota
+	requestStateParsingHeaders
 	requestStateDone
 )
 
@@ -118,7 +121,7 @@ func requestLineFromString(str string) (*RequestLine, error) {
 	}, nil
 }
 
-func (r *Request) parse(data []byte) (int, error) {
+func (r *Request) parse_old(data []byte) (int, error) {
 	switch r.state {
 	case requestStateInitialized:
 		requestLine, bytesParsed, err := parseRequestLine(data)
@@ -138,4 +141,57 @@ func (r *Request) parse(data []byte) (int, error) {
 	default:
 		return 0, fmt.Errorf("error: unknown state")
 	}
+}
+
+func (r *Request) parse(data []byte) (int, error) {
+	switch r.state {
+	case requestStateInitialized:
+		requestLine, bytesParsed, err := parseRequestLine(data)
+		if err != nil {
+			return 0, err
+		}
+		if bytesParsed == 0 {
+			return 0, nil
+		}
+		if bytesParsed > 0 {
+			r.RequestLine = *requestLine
+			r.state = requestStateParsingHeaders
+		}
+	}
+	totalBytesParsed := 0
+	for r.state != requestStateDone {
+		n, err := r.parseSingle(data[totalBytesParsed:])
+		if err != nil {
+			continue
+		}
+		totalBytesParsed += n
+	}
+	r.state = requestStateDone
+	return totalBytesParsed, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
+	switch r.state {
+	case requestStateDone:
+		return 0, fmt.Errorf("error: trying to read data in a done state")
+	case requestStateParsingHeaders:
+		bytesParsed, done, err := r.Headers.Parse(data)
+		if done {
+			r.state = requestStateDone
+		}
+		if err != nil {
+			return 0, err
+		}
+		if bytesParsed == 0 {
+			return 0, nil
+		}
+		if bytesParsed > 0 {
+			// r.RequestLine = *requestLine
+			r.state = requestStateDone
+		}
+		return bytesParsed, err
+	default:
+		return 0, fmt.Errorf("error: unknown state")
+	}
+	// return 0, nil
 }
