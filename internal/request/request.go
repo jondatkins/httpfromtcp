@@ -39,7 +39,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	buffer := make([]byte, bufferSize, bufferSize)
 	readToIndex := 0
 	request := &Request{
-		state: requestStateInitialized,
+		state:   requestStateInitialized,
+		Headers: headers.NewHeaders(),
 	}
 	for request.state != requestStateDone {
 		if readToIndex >= len(buffer) {
@@ -121,18 +122,42 @@ func requestLineFromString(str string) (*RequestLine, error) {
 	}, nil
 }
 
-func (r *Request) parse_old(data []byte) (int, error) {
+func (r *Request) parse(data []byte) (int, error) {
+	totalBytesParsed := 0
+
+	for r.state != requestStateDone {
+		n, err := r.parseSingle(data[totalBytesParsed:])
+		if err != nil {
+			return totalBytesParsed, err
+		}
+		if n == 0 {
+			break
+		}
+		totalBytesParsed += n
+	}
+
+	return totalBytesParsed, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
 	switch r.state {
 	case requestStateInitialized:
-		requestLine, bytesParsed, err := parseRequestLine(data)
+		requestLine, n, err := parseRequestLine(data)
 		if err != nil {
 			return 0, err
 		}
-		if bytesParsed == 0 {
+		if n == 0 {
 			return 0, nil
 		}
-		if bytesParsed > 0 {
-			r.RequestLine = *requestLine
+		r.RequestLine = *requestLine
+		r.state = requestStateParsingHeaders
+		return n, nil
+	case requestStateParsingHeaders:
+		bytesParsed, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if done {
 			r.state = requestStateDone
 		}
 		return bytesParsed, nil
@@ -141,57 +166,4 @@ func (r *Request) parse_old(data []byte) (int, error) {
 	default:
 		return 0, fmt.Errorf("error: unknown state")
 	}
-}
-
-func (r *Request) parse(data []byte) (int, error) {
-	switch r.state {
-	case requestStateInitialized:
-		requestLine, bytesParsed, err := parseRequestLine(data)
-		if err != nil {
-			return 0, err
-		}
-		if bytesParsed == 0 {
-			return 0, nil
-		}
-		if bytesParsed > 0 {
-			r.RequestLine = *requestLine
-			r.state = requestStateParsingHeaders
-		}
-	}
-	totalBytesParsed := 0
-	for r.state != requestStateDone {
-		n, err := r.parseSingle(data[totalBytesParsed:])
-		if err != nil {
-			continue
-		}
-		totalBytesParsed += n
-	}
-	r.state = requestStateDone
-	return totalBytesParsed, nil
-}
-
-func (r *Request) parseSingle(data []byte) (int, error) {
-	switch r.state {
-	case requestStateDone:
-		return 0, fmt.Errorf("error: trying to read data in a done state")
-	case requestStateParsingHeaders:
-		bytesParsed, done, err := r.Headers.Parse(data)
-		if done {
-			r.state = requestStateDone
-		}
-		if err != nil {
-			return 0, err
-		}
-		if bytesParsed == 0 {
-			return 0, nil
-		}
-		if bytesParsed > 0 {
-			// r.RequestLine = *requestLine
-			r.state = requestStateDone
-		}
-		return bytesParsed, err
-	default:
-		return 0, fmt.Errorf("error: unknown state")
-	}
-	// return 0, nil
 }
