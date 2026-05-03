@@ -12,10 +12,11 @@ import (
 )
 
 type Request struct {
-	RequestLine RequestLine
-	Headers     headers.Headers
-	Body        []byte
-	state       requestState
+	RequestLine    RequestLine
+	Headers        headers.Headers
+	Body           []byte
+	state          requestState
+	bodyLengthRead int
 }
 
 type RequestLine struct {
@@ -165,24 +166,24 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 		return bytesParsed, nil
 	case requestStateParsingBody:
-		if r.Headers.Get("Content-Length") == "" {
+		contentLenStr, ok := r.Headers.Get("Content-Length")
+		if !ok {
 			r.state = requestStateDone
-			return 0, nil
+			return len(data), nil
+		}
+		contLength, err := strconv.Atoi(contentLenStr)
+		if err != nil {
+			return 0, fmt.Errorf("malformed Content-Length: %s", contentLenStr)
 		}
 		r.Body = append(r.Body, data...)
-		contLength, err := strconv.Atoi(r.Headers.Get("Content-Length"))
-		if err != nil {
-			return 0, err
-		}
+		r.bodyLengthRead += len(data)
 		// If the length of the body is greater than the Content-Length header, return an error.
 		if len(r.Body) > contLength {
 			return 0, fmt.Errorf("Body length: %d greater than content length: %d", len(r.Body), contLength)
 		}
-
 		// If the length of the body is equal to the Content-Length header, move to the done state.
 		if len(r.Body) == contLength {
 			r.state = requestStateDone
-			// return len(data), nil
 		}
 		// Report that you've consumed the entire length of the data you were given.
 		return len(data), nil

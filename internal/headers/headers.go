@@ -3,6 +3,7 @@ package headers
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -42,9 +43,10 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 }
 
 // Add a new .Get method to the Headers struct; it should take a key and return the value for that key, keeping case insensitivity in mind.
-func (h Headers) Get(key string) string {
+func (h Headers) Get(key string) (string, bool) {
 	key = strings.ToLower(key)
-	return h[key]
+	v, ok := h[key]
+	return v, ok
 }
 
 func (h Headers) Set(key, value string) {
@@ -65,12 +67,19 @@ var tokenChars = []byte{'!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', 
 // or characters that are allowed in a token
 func validTokens(data []byte) bool {
 	for _, c := range data {
-		if !(c >= 'A' && c <= 'Z' ||
-			c >= 'a' && c <= 'z' ||
-			c >= '0' && c <= '9' ||
-			c == '-') {
+		if !isTokenChar(c) {
 			return false
 		}
 	}
 	return true
+}
+
+func isTokenChar(c byte) bool {
+	if !(c >= 'A' && c <= 'Z' ||
+		c >= 'a' && c <= 'z' ||
+		c >= '0' && c <= '9' ||
+		c == '-') {
+		return true
+	}
+	return slices.Contains(tokenChars, c)
 }
