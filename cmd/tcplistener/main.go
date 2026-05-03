@@ -8,7 +8,7 @@ import (
 	"net"
 	"strings"
 
-	"http_from_tcp/internal/request"
+	"github.com/jondatkins/http_from_tcp/internal/request"
 )
 
 const port = ":42069"

@@ -8,13 +8,16 @@ import (
 	"strconv"
 	"strings"
 
-	"http_from_tcp/internal/headers"
+	// "github.com/bootdotdev/learn-http-protocol/internal/headers"
+	// "http_from_tcp/internal/headers"
+	"github.com/jondatkins/http_from_tcp/internal/headers"
 )
 
 type Request struct {
-	RequestLine    RequestLine
-	Headers        headers.Headers
-	Body           []byte
+	RequestLine RequestLine
+	Headers     headers.Headers
+	Body        []byte
+
 	state          requestState
 	bodyLengthRead int
 }
@@ -40,42 +43,41 @@ const (
 )
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	buffer := make([]byte, bufferSize, bufferSize)
+	buf := make([]byte, bufferSize, bufferSize)
 	readToIndex := 0
-	request := &Request{
+	req := &Request{
 		state:   requestStateInitialized,
 		Headers: headers.NewHeaders(),
 		Body:    make([]byte, 0),
 	}
-	for request.state != requestStateDone {
-		if readToIndex >= len(buffer) {
-			newBuffer := make([]byte, len(buffer)*2)
-			copy(newBuffer, buffer)
-			buffer = newBuffer
+	for req.state != requestStateDone {
+		if readToIndex >= len(buf) {
+			newBuf := make([]byte, len(buf)*2)
+			copy(newBuf, buf)
+			buf = newBuf
 		}
 
-		numBytesRead, err := reader.Read(buffer[readToIndex:])
+		numBytesRead, err := reader.Read(buf[readToIndex:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				if request.state != requestStateDone {
-					return nil, fmt.Errorf("incomplete request")
+				if req.state != requestStateDone {
+					return nil, fmt.Errorf("incomplete request, in state: %d, read n bytes on EOF: %d", req.state, numBytesRead)
 				}
-				request.state = requestStateDone
 				break
 			}
 			return nil, err
 		}
 		readToIndex += numBytesRead
 
-		numBytesParsed, err := request.parse(buffer[:readToIndex])
+		numBytesParsed, err := req.parse(buf[:readToIndex])
 		if err != nil {
 			return nil, err
 		}
 
-		copy(buffer, buffer[numBytesParsed:])
+		copy(buf, buf[numBytesParsed:])
 		readToIndex -= numBytesParsed
 	}
-	return request, nil
+	return req, nil
 }
 
 func parseRequestLine(data []byte) (*RequestLine, int, error) {
@@ -88,7 +90,7 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	return requestLine, idx + len(crlf), nil
+	return requestLine, idx + 2, nil
 }
 
 func requestLineFromString(str string) (*RequestLine, error) {
@@ -129,7 +131,6 @@ func requestLineFromString(str string) (*RequestLine, error) {
 
 func (r *Request) parse(data []byte) (int, error) {
 	totalBytesParsed := 0
-
 	for r.state != requestStateDone {
 		n, err := r.parseSingle(data[totalBytesParsed:])
 		if err != nil {
@@ -148,48 +149,48 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 	case requestStateInitialized:
 		requestLine, n, err := parseRequestLine(data)
 		if err != nil {
+			// something actually went wrong
 			return 0, err
 		}
 		if n == 0 {
+			// just need more data
 			return 0, nil
 		}
 		r.RequestLine = *requestLine
 		r.state = requestStateParsingHeaders
 		return n, nil
 	case requestStateParsingHeaders:
-		bytesParsed, done, err := r.Headers.Parse(data)
+		n, done, err := r.Headers.Parse(data)
 		if err != nil {
 			return 0, err
 		}
 		if done {
 			r.state = requestStateParsingBody
 		}
-		return bytesParsed, nil
+		return n, nil
 	case requestStateParsingBody:
 		contentLenStr, ok := r.Headers.Get("Content-Length")
 		if !ok {
+			// assume that if no content-length header is present, there is no body
 			r.state = requestStateDone
 			return len(data), nil
 		}
-		contLength, err := strconv.Atoi(contentLenStr)
+		contentLen, err := strconv.Atoi(contentLenStr)
 		if err != nil {
-			return 0, fmt.Errorf("malformed Content-Length: %s", contentLenStr)
+			return 0, fmt.Errorf("malformed Content-Length: %s", err)
 		}
 		r.Body = append(r.Body, data...)
 		r.bodyLengthRead += len(data)
-		// If the length of the body is greater than the Content-Length header, return an error.
-		if len(r.Body) > contLength {
-			return 0, fmt.Errorf("Body length: %d greater than content length: %d", len(r.Body), contLength)
+		if r.bodyLengthRead > contentLen {
+			return 0, fmt.Errorf("Content-Length too large")
 		}
-		// If the length of the body is equal to the Content-Length header, move to the done state.
-		if len(r.Body) == contLength {
+		if r.bodyLengthRead == contentLen {
 			r.state = requestStateDone
 		}
-		// Report that you've consumed the entire length of the data you were given.
 		return len(data), nil
 	case requestStateDone:
 		return 0, fmt.Errorf("error: trying to read data in a done state")
 	default:
-		return 0, fmt.Errorf("error: unknown state")
+		return 0, fmt.Errorf("unknown state")
 	}
 }

@@ -16,6 +16,8 @@ func NewHeaders() Headers {
 }
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
+	// print the data with crlf encoding
+
 	idx := bytes.Index(data, []byte(crlf))
 	if idx == -1 {
 		return 0, false, nil
@@ -42,7 +44,6 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	return idx + 2, false, nil
 }
 
-// Add a new .Get method to the Headers struct; it should take a key and return the value for that key, keeping case insensitivity in mind.
 func (h Headers) Get(key string) (string, bool) {
 	key = strings.ToLower(key)
 	v, ok := h[key]
@@ -75,11 +76,11 @@ func validTokens(data []byte) bool {
 }
 
 func isTokenChar(c byte) bool {
-	if !(c >= 'A' && c <= 'Z' ||
+	if c >= 'A' && c <= 'Z' ||
 		c >= 'a' && c <= 'z' ||
-		c >= '0' && c <= '9' ||
-		c == '-') {
+		c >= '0' && c <= '9' {
 		return true
 	}
+
 	return slices.Contains(tokenChars, c)
 }
