@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"http_from_tcp/internal/headers"
@@ -13,6 +14,7 @@ import (
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	state       requestState
 }
 
@@ -27,6 +29,7 @@ type requestState int
 const (
 	requestStateInitialized requestState = iota
 	requestStateParsingHeaders
+	requestStateParsingBody
 	requestStateDone
 )
 
@@ -41,6 +44,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := &Request{
 		state:   requestStateInitialized,
 		Headers: headers.NewHeaders(),
+		Body:    make([]byte, 0),
 	}
 	for request.state != requestStateDone {
 		if readToIndex >= len(buffer) {
@@ -128,14 +132,13 @@ func (r *Request) parse(data []byte) (int, error) {
 	for r.state != requestStateDone {
 		n, err := r.parseSingle(data[totalBytesParsed:])
 		if err != nil {
-			return totalBytesParsed, err
+			return 0, err
 		}
+		totalBytesParsed += n
 		if n == 0 {
 			break
 		}
-		totalBytesParsed += n
 	}
-
 	return totalBytesParsed, nil
 }
 
@@ -158,9 +161,31 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, err
 		}
 		if done {
-			r.state = requestStateDone
+			r.state = requestStateParsingBody
 		}
 		return bytesParsed, nil
+	case requestStateParsingBody:
+		if r.Headers.Get("Content-Length") == "" {
+			r.state = requestStateDone
+			return 0, nil
+		}
+		r.Body = append(r.Body, data...)
+		contLength, err := strconv.Atoi(r.Headers.Get("Content-Length"))
+		if err != nil {
+			return 0, err
+		}
+		// If the length of the body is greater than the Content-Length header, return an error.
+		if len(r.Body) > contLength {
+			return 0, fmt.Errorf("Body length: %d greater than content length: %d", len(r.Body), contLength)
+		}
+
+		// If the length of the body is equal to the Content-Length header, move to the done state.
+		if len(r.Body) == contLength {
+			r.state = requestStateDone
+			// return len(data), nil
+		}
+		// Report that you've consumed the entire length of the data you were given.
+		return len(data), nil
 	case requestStateDone:
 		return 0, fmt.Errorf("error: trying to read data in a done state")
 	default:

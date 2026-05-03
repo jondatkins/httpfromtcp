@@ -37,6 +37,11 @@ func main() {
 		fmt.Println("- Target:", req.RequestLine.RequestTarget)
 		fmt.Println("- Version:", req.RequestLine.HttpVersion)
 		fmt.Println("Connection to ", conn.RemoteAddr(), "closed")
+
+		fmt.Println("Headers:")
+		for key, value := range req.Headers {
+			fmt.Printf("- %s: %s\n", key, value)
+		}
 	}
 }
 

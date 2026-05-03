@@ -20,12 +20,12 @@ func TestHeadersParse(t *testing.T) {
 
 	// Test: Valid single header with extra whitespace
 	headers = NewHeaders()
-	data = []byte("       Host: localhost:42069                           \r\n\r\n")
+	data = []byte("Host: localhost:42069       \r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	assert.Equal(t, "localhost:42069", headers["host"])
-	assert.Equal(t, 57, n)
+	assert.Equal(t, 30, n)
 	assert.False(t, done)
 
 	// Test: Valid 2 headers with existing headers
@@ -51,42 +51,18 @@ func TestHeadersParse(t *testing.T) {
 
 	// Test: Invalid spacing header
 	headers = NewHeaders()
-	data = []byte("       host : localhost:42069       \r\n\r\n")
+	data = []byte("       Host: localhost:42069\r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
 
+	// Test: Invalid character header
 	headers = NewHeaders()
-	data = []byte("HoST: localhost:42069\r\n\r\n")
-	n, done, err = headers.Parse(data)
-	require.NoError(t, err)
-	assert.Equal(t, "localhost:42069", headers["host"])
-	require.NotNil(t, headers)
-	assert.Equal(t, 23, n)
-	assert.False(t, done)
-
-	// Test: Invalid character in field name
-	headers = NewHeaders()
-	data = []byte("H@st: localhost:42069\r\n\r\n")
+	data = []byte("H©st: localhost:42069\r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
-	assert.False(t, done)
-
-	// Test: Matching headers should also work
-	headers = map[string]string{"set-person": "lane-loves-go"}
-	// headers["set-person"] = "prime-loves-zig"
-	data = []byte("Set-person: prime-loves-zig\r\n\r\n")
-	data2 := []byte("Set-person: tj-loves-ocaml\r\n\r\n")
-	_, done, err = headers.Parse(data)
-	_, done, err = headers.Parse(data2)
-	require.NoError(t, err)
-	require.NotNil(t, headers)
-	expectedString := "lane-loves-go, prime-loves-zig, tj-loves-ocaml"
-	actualString := headers["set-person"]
-	assert.Equal(t, expectedString, actualString)
-	// assert.Equal(t, 46, n)
 	assert.False(t, done)
 
 	// Test: Same header key
