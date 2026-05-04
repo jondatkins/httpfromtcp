@@ -8,67 +8,55 @@ import (
 )
 
 type Server struct {
-	Listener net.Listener
-	IsClosed atomic.Bool
+	listener net.Listener
+	closed   atomic.Bool
 }
 
 func Serve(port int) (*Server, error) {
 	portString := fmt.Sprintf(":%d", port)
-	l, err := net.Listen("tcp", portString)
+	listener, err := net.Listen("tcp", portString)
 	if err != nil {
 		return nil, err
 	}
-	server := Server{
-		Listener: l,
+	server := &Server{
+		listener: listener,
 	}
-	server.listen()
-	return &server, nil
+	go server.listen()
+	return server, nil
 }
 
 func (s *Server) Close() error {
-	s.IsClosed.Store(true)
-	s.Listener.Close()
+	s.closed.Store(true)
+	if s.listener != nil {
+		s.listener.Close()
+	}
 	return nil
 }
 
 func (s *Server) listen() {
 	for {
-		// Wait for a connection.
-		conn, err := s.Listener.Accept()
+		conn, err := s.listener.Accept()
 		if err != nil {
-			if s.IsClosed.Load() {
-				break
+			if s.closed.Load() {
+				return
 			}
-			log.Fatal(err)
+			log.Printf("Error acception connection: %v", err)
+			continue
 		}
-		// Handle the connection in a new goroutine.
-		// The loop then returns to accepting, so that
-		// multiple connections may be served concurrently.
-		go func(c net.Conn) {
-			// Echo all incoming data.
-			// io.Copy(c, c)
-			s.handle(c)
-			// Shut down the connection.
-			c.Close()
-		}(conn)
+		go s.handle(conn)
+		// go func(c net.Conn) {
+		// 	s.handle(c)
+		// }(conn)
 	}
 }
 
 func (s *Server) handle(conn net.Conn) {
+	defer conn.Close()
 	testResp := `HTTP/1.1 200 OK
 	Content-Type: text/plain
 	Content-Length: 13
 
-	Hello World!
-	defer conn.Close()`
-	fmt.Println("New connection accepted")
-
-	buffer := make([]byte, 1024)
-	_, err := conn.Read(buffer)
+	Hello World!`
 	conn.Write([]byte(testResp))
-	if err != nil {
-		fmt.Println("Error reading from connection:", err)
-		return
-	}
-	fmt.Println("Received data:", string(buffer))
+	return
 }
