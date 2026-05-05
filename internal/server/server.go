@@ -2,9 +2,12 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync/atomic"
+
+	"github.com/jondatkins/http_from_tcp/internal/response"
 )
 
 type Server struct {
@@ -52,11 +55,25 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	testResp := `HTTP/1.1 200 OK
-	Content-Type: text/plain
-	Content-Length: 13
 
-	Hello World!`
-	conn.Write([]byte(testResp))
-	return
+	err := response.WriteStatusLine(conn, response.OK)
+	if err != nil {
+		fmt.Printf("Error: %s", err.Error())
+		return
+	}
+	headers := response.GetDefaultHeaders(0)
+
+	err = response.WriteHeaders(conn, headers)
+	if err != nil {
+		fmt.Printf("Error: %s", err.Error())
+		return
+	}
+	for key, value := range headers {
+		fmt.Println(key, " ", value)
+	}
+	_, err = io.WriteString(conn, "\r\n")
+	if err != nil {
+		fmt.Printf("error writing final crlf: %v\n", err)
+		return
+	}
 }
