@@ -21,9 +21,9 @@ type (
 )
 
 type Server struct {
+	handler  Handler
 	listener net.Listener
 	closed   atomic.Bool
-	handler  Handler
 }
 
 func (he HandlerError) Write(w io.Writer) {
@@ -71,40 +71,14 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-
+	w := response.NewWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-
-		// Write(conn, HandlerError{
-		hErr := &HandlerError{
-			StatusCode: response.StatusCodeBadRequest,
-			Message:    "Bad Request\n",
-		}
-		hErr.Write(conn)
+		w.WriteStatusLine(response.StatusCodeBadRequest)
+		body := []byte(fmt.Sprintf("Error parsing request: %v", err))
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody(body)
 		return
 	}
-
-	writer := &response.Writer{}
-
-	s.handler(writer, req)
-
-	response.WriteStatusLine(conn, writer.StatusCode)
-	response.WriteHeaders(conn, writer.Headers)
-	io.WriteString(conn, string(writer.Body))
-	// var buffer bytes.Buffer
-	// buffer := bytes.NewBuffer([]byte{})
-	// writer := response.Writer{}
-
-	// handlerErr := s.handler(&writer, req)
-	// if handlerErr != nil {
-	// 	// writeError(conn, *handlerErr)
-	// 	handlerErr.Write(conn)
-	// 	return
-	// }
-	// b := buffer.Bytes()
-	// response.WriteStatusLine(conn, response.StatusCodeSuccess)
-	// headers := response.GetDefaultHeaders(len(b))
-	// response.WriteHeaders(conn, headers)
-	// conn.Write(b)
-	// return
+	s.handler(w, req)
 }
