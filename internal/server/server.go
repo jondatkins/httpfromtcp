@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -17,7 +16,8 @@ type (
 		StatusCode response.StatusCode
 		Message    string
 	}
-	Handler func(w io.Writer, req *request.Request) *HandlerError
+	// Handler func(w io.Writer, req *request.Request) *HandlerError
+	Handler func(w *response.Writer, req *request.Request)
 )
 
 type Server struct {
@@ -33,25 +33,6 @@ func (he HandlerError) Write(w io.Writer) {
 	response.WriteHeaders(w, headers)
 	w.Write(messageBytes)
 }
-
-// func writeError(writer io.Writer, handlerError HandlerError) error {
-// 	// _, err := writer.Write([]byte(fmt.Sprintf(handlerError.statusCode + " " + handlerError.message)))
-// 	body := handlerError.Message
-//
-// 	err := response.WriteStatusLine(writer, handlerError.StatusCode)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	headers := response.GetDefaultHeaders(len(body))
-//
-// 	err = response.WriteHeaders(writer, headers)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	_, err = writer.Write([]byte(body))
-// 	return err
-// }
 
 func Serve(port int, handlerFunc Handler) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -103,19 +84,27 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 
-	// var buffer bytes.Buffer
-	buffer := bytes.NewBuffer([]byte{})
+	writer := &response.Writer{}
 
-	handlerErr := s.handler(buffer, req)
-	if handlerErr != nil {
-		// writeError(conn, *handlerErr)
-		handlerErr.Write(conn)
-		return
-	}
-	b := buffer.Bytes()
-	response.WriteStatusLine(conn, response.StatusCodeSuccess)
-	headers := response.GetDefaultHeaders(len(b))
-	response.WriteHeaders(conn, headers)
-	conn.Write(b)
-	return
+	s.handler(writer, req)
+
+	response.WriteStatusLine(conn, writer.StatusCode)
+	response.WriteHeaders(conn, writer.Headers)
+	io.WriteString(conn, string(writer.Body))
+	// var buffer bytes.Buffer
+	// buffer := bytes.NewBuffer([]byte{})
+	// writer := response.Writer{}
+
+	// handlerErr := s.handler(&writer, req)
+	// if handlerErr != nil {
+	// 	// writeError(conn, *handlerErr)
+	// 	handlerErr.Write(conn)
+	// 	return
+	// }
+	// b := buffer.Bytes()
+	// response.WriteStatusLine(conn, response.StatusCodeSuccess)
+	// headers := response.GetDefaultHeaders(len(b))
+	// response.WriteHeaders(conn, headers)
+	// conn.Write(b)
+	// return
 }
