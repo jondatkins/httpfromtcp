@@ -68,3 +68,11 @@ func WriteHeaders(w io.Writer, headers headers.Headers) error {
 	_, err := w.Write([]byte("\r\n"))
 	return err
 }
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	return 0, nil
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	return 0, nil
+}
