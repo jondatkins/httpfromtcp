@@ -2,11 +2,20 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
+	"github.com/jondatkins/http_from_tcp/internal/headers"
 	"github.com/jondatkins/http_from_tcp/internal/request"
 	"github.com/jondatkins/http_from_tcp/internal/response"
 	"github.com/jondatkins/http_from_tcp/internal/server"
@@ -83,5 +92,73 @@ func handler(w *response.Writer, req *request.Request) {
 		w.WriteStatusLine(response.StatusCodeInternalServerError)
 		w.WriteHeaders(headers)
 		w.WriteBody([]byte(body))
+	}
+
+	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
+		path := strings.TrimPrefix(
+			req.RequestLine.RequestTarget, "/httpbin",
+		)
+
+		url := "https://httpbin.org/" + path
+
+		resp, err := http.Get(url)
+		if err != nil {
+			w.WriteStatusLine(response.StatusCodeInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		respHeaders := response.GetDefaultHeaders(0)
+		respHeaders.Set("Trailer", "X-Content-SHA256")
+		respHeaders.Set("Trailer", "X-Content-Length")
+		respHeaders.Replace("Content-Type", "text/plain")
+		respHeaders.Replace("Transfer-Encoding", "chunked")
+		respHeaders.Delete("Content-Length")
+
+		w.WriteStatusLine(response.StatusCodeSuccess)
+		w.WriteHeaders(respHeaders)
+
+		buf := make([]byte, 1024)
+		var fullBody bytes.Buffer
+
+		for {
+			n, err := resp.Body.Read(buf)
+
+			fmt.Println(n)
+
+			if n > 0 {
+				chunk := buf[:n]
+				fullBody.Write(chunk)
+
+				_, writeErr := w.WriteChunkedBody(chunk)
+				if writeErr != nil {
+					return
+				}
+				// _, writeErr := w.WriteChunkedBody(buf[:n])
+				// if writeErr != nil {
+				// 	return
+				// }
+			}
+
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				return
+			}
+		}
+		hash := sha256.Sum256(fullBody.Bytes())
+
+		trailers := make(headers.Headers)
+
+		trailers.Set(
+			"X-Content-SHA256",
+			hex.EncodeToString(hash[:]),
+		)
+
+		trailers.Set("X-Content-Length", strconv.Itoa(fullBody.Len()))
+
+		w.WriteChunkedBodyDone(trailers)
 	}
 }
